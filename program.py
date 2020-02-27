@@ -76,16 +76,16 @@ class Kuhn_Poker_Learner:
 
         return playerCards, dealerCards
 
-    def sumCards(self, cards, usedAces):
+    def sumCards(self, cards, avalibleAces):
         count = sum(cards)
         if count > 21:  # --> ce je cez 21 pogledamo ce je notr as
-            if usedAces < cards.count(11):   # !! loh da je 11 ne "11"
+            if avalibleAces > 0:   # !! loh da je 11 ne "11"
                 count -= 10
-                usedAces += 1
+                avalibleAces -= 1
 
-        return count, usedAces
+        return count, avalibleAces
 
-    def payoff(self, cards, cardIndex, roundNum, history, stava, usedAcesPl, usedAcesDe):
+    def payoff(self, cards, cardIndex, roundNum, history, stava, avalibleAcesPl, avalibleAcesDe):
 
         playerCards, dealerCards = self.convertHistory(history)
         if isinstance(dealerCards, (str)):
@@ -93,11 +93,8 @@ class Kuhn_Poker_Learner:
         if(playerCards[ len(playerCards) - 1] == '' ):
             playerCards.pop(len(playerCards) - 1)
 
-        playerCards = [int(i) for i in playerCards]         # TO DO oz. tuki naprej deli..... ko ma stanje 'S' ga zjebe neki s stringi
-        dealerCards = [int(i) for i in dealerCards]
-
-        playerCount, usedAcesPl = self.sumCards(playerCards, usedAcesPl)
-        dealerCount, usedAcesDe = self.sumCards(dealerCards, usedAcesDe)
+        playerCount, avalibleAcesPl = self.sumCards(playerCards, avalibleAcesPl)
+        dealerCount, avalibleAcesDe = self.sumCards(dealerCards, avalibleAcesDe)
 
 
         if roundNum == 1:
@@ -113,7 +110,8 @@ class Kuhn_Poker_Learner:
                 if dealerCount > 21:
                     return stava
                 elif dealerCount < 17:
-                    dealerCount += cards[cardIndex]
+                    dealerCards.append(cards[cardIndex])
+                    dealerCount, avalibleAcesDe = self.sumCards(cards, avalibleAcesDe)
                     cardIndex += 1
 
                 else:
@@ -126,7 +124,7 @@ class Kuhn_Poker_Learner:
             return "error line cca 110"
 
 
-    def cfr(self, cards, history, p0, stava, cardsIndex, usedAcesPl, usedAcesDe):
+    def cfr(self, cards, history, p0, stava, cardsIndex, avalibleAcesPl, avalibleAcesDe):
         """
         history bo v obliki :"DealerCount|PlayerCount" --> "9|18"  ali ko damo stand "8|19S|"
         """
@@ -134,6 +132,10 @@ class Kuhn_Poker_Learner:
 
         if history == "":
             history = str(cards[0]) + "|" + str(cards[1])
+            if(cards[0] == 11):
+                avalibleAcesDe += 1
+            if(cards[1] == 11):
+                avalibleAcesPl += 1
             cardsIndex += 2 # cardsIndex = 2
 
         roundNum = history.count('|')  # --> kje v igri smo
@@ -158,17 +160,25 @@ class Kuhn_Poker_Learner:
         util = np.zeros((self.NUM_ACTIONS))   # kolk utila mamo za bet pa kolk za pass
         nodeUtil = 0
 
+
+        playerCount, dealerCount = self.convertHistory(history)
+        playerCount = playerCount + cards[cardsIndex]
+        if cards[cardsIndex] == 11:
+            avalibleAcesPl += 1
+        cardsIndex += 1
+        newHistory = str(dealerCount) + "|" + str(playerCount)
+
         for i in range(self.NUM_ACTIONS):   # --> 0=Hit 1=Stand 2=Double
+
             if i == 0:
-                # TODO nextHistoy mors razbit na dealer pa player in playerjeve karte seštet
-                nextHistory = history + "," + str(cards[cardsIndex])
-                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex + 1, usedAcesPl, usedAcesDe)             # --> tuki poprau da prvo prever ce lahko sploh stau
+                nextHistory = newHistory
+                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex + 1, avalibleAcesPl, avalibleAcesDe)             # --> tuki poprau da prvo prever ce lahko sploh stau
             elif i == 1:
-                nextHistory = history + ",S|"
-                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex + 1, usedAcesPl, usedAcesDe)
+                nextHistory = history + "S|"
+                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex + 1, avalibleAcesPl, avalibleAcesDe)
             if i == 2:
-                nextHistory = history + "," + str(cards[cardsIndex])
-                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava * 2, cardsIndex + 1, usedAcesPl, usedAcesDe)
+                nextHistory = newHistory
+                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava * 2, cardsIndex + 1, avalibleAcesPl, avalibleAcesDe)
 
             nodeUtil += strategy[i] * util[i]
 
