@@ -67,34 +67,39 @@ class Kuhn_Poker_Learner:
 
     def convertHistory(self, history):
 
+        stand = False
         splitHis = history.split('|')
 
-        dealerCards = splitHis[0]
-        playerCards = splitHis[1].split(',')
-        for ind, card in enumerate(playerCards):       # !! mogoce ne spreminja dejanske tabele
-            playerCards[ind] = card[1:]
+        dealerCount = int(splitHis[0])
+        playerCards = splitHis[1]
 
-        return playerCards, dealerCards
+        if playerCards[len(playerCards) - 1] == 'S':
+            stand = True
+            playerCards = playerCards[:-1]
 
-    def sumCards(self, cards, avalibleAces):
-        count = sum(cards)
-        if count > 21:  # --> ce je cez 21 pogledamo ce je notr as
-            if avalibleAces > 0:   # !! loh da je 11 ne "11"
+        playerCount = int(playerCards)
+
+        return playerCount, dealerCount, stand
+
+    def checkAces(self, Player, count, avalibleAces, history):      #player je boolean al smo pr dealerju al playerju
+        if count > 21 and avalibleAces > 0:  # --> ce je cez 21 pogledamo ce je notr as
                 count -= 10
                 avalibleAces -= 1
+                split = history.split('|')
+                if Player:
+                    split[1] = str(count)
+                else:
+                    split[0] = str(count)
+                history = split[0] + "|" + split[1]
 
-        return count, avalibleAces
+        return count, avalibleAces, history
 
     def payoff(self, cards, cardIndex, roundNum, history, stava, avalibleAcesPl, avalibleAcesDe):
 
-        playerCards, dealerCards = self.convertHistory(history)
-        if isinstance(dealerCards, (str)):
-            dealerCards = [dealerCards]
-        if(playerCards[ len(playerCards) - 1] == '' ):
-            playerCards.pop(len(playerCards) - 1)
+        playerCount, dealerCount, stand = self.convertHistory(history)
 
-        playerCount, avalibleAcesPl = self.sumCards(playerCards, avalibleAcesPl)
-        dealerCount, avalibleAcesDe = self.sumCards(dealerCards, avalibleAcesDe)
+        playerCount, avalibleAcesPl, history = self.checkAces(True, playerCount, avalibleAcesPl, history)
+        dealerCount, avalibleAcesDe, history = self.checkAces(False, dealerCount, avalibleAcesDe, history)
 
 
         if roundNum == 1:
@@ -110,8 +115,13 @@ class Kuhn_Poker_Learner:
                 if dealerCount > 21:
                     return stava
                 elif dealerCount < 17:
-                    dealerCards.append(cards[cardIndex])
-                    dealerCount, avalibleAcesDe = self.sumCards(cards, avalibleAcesDe)
+                    dealerCount += cards[cardIndex]
+                    history = str(dealerCount) + "|" + str(playerCount) + "|"
+
+                    if(cards[cardIndex]) == 11:
+                        avalibleAcesDe += 1
+                    dealerCount, dealerCount, stand = self.convertHistory(history)
+                    dealerCount, avalibleAcesDe, history = self.checkAces(False, dealerCount, avalibleAcesDe, history)
                     cardIndex += 1
 
                 else:
@@ -141,7 +151,7 @@ class Kuhn_Poker_Learner:
         roundNum = history.count('|')  # --> kje v igri smo
 
         # dobimo payoff ce je končno stanje
-        payoff = self.payoff(cards, cardsIndex,roundNum, history, stava, usedAcesPl, usedAcesDe)
+        payoff = self.payoff(cards, cardsIndex,roundNum, history, stava, avalibleAcesPl, avalibleAcesDe)
         if payoff != "continue":
             return payoff
 
@@ -161,12 +171,11 @@ class Kuhn_Poker_Learner:
         nodeUtil = 0
 
 
-        playerCount, dealerCount = self.convertHistory(history)
-        playerCount = playerCount + cards[cardsIndex]
+        playerCount, dealerCount, stand = self.convertHistory(history)
+        newPlayerCount = playerCount + cards[cardsIndex]
         if cards[cardsIndex] == 11:
             avalibleAcesPl += 1
-        cardsIndex += 1
-        newHistory = str(dealerCount) + "|" + str(playerCount)
+        newHistory = str(dealerCount) + "|" + str(newPlayerCount)
 
         for i in range(self.NUM_ACTIONS):   # --> 0=Hit 1=Stand 2=Double
 
@@ -175,7 +184,7 @@ class Kuhn_Poker_Learner:
                 util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex + 1, avalibleAcesPl, avalibleAcesDe)             # --> tuki poprau da prvo prever ce lahko sploh stau
             elif i == 1:
                 nextHistory = history + "S|"
-                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex + 1, avalibleAcesPl, avalibleAcesDe)
+                util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava, cardsIndex , avalibleAcesPl, avalibleAcesDe)
             if i == 2:
                 nextHistory = newHistory
                 util[i] =  self.cfr(cards, nextHistory, p0 * strategy[i], stava * 2, cardsIndex + 1, avalibleAcesPl, avalibleAcesDe)
@@ -239,7 +248,7 @@ def stevilkaVKarto(st):
 
 if __name__ == "__main__":
     learner = Kuhn_Poker_Learner()
-    mapaNodov = learner.train(1000000)
+    mapaNodov = learner.train(20000000)
 
     # igranje igre
     # igrajIgro(mapaNodov)
